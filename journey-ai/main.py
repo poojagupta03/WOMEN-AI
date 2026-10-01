@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from services.anomaly_model import check_anomaly
+from services.assistant import build_advice
 from services.risk_engine import JourneySignals, calculate_risk
 
 app = FastAPI(title="Journey AI")
@@ -22,13 +23,7 @@ def level_from_score(score: int) -> str:
     return "low"
 
 
-@app.get("/health")
-def health():
-    return {"status": "ok", "service": "journey-ai"}
-
-
-@app.post("/risk/score")
-def risk_score(req: RiskRequest):
+def compute_risk(req: RiskRequest):
     signals = JourneySignals(
         route_deviation_m=req.route_deviation_m,
         stop_duration_min=req.stop_duration_min,
@@ -45,7 +40,7 @@ def risk_score(req: RiskRequest):
     if anomaly["is_anomaly"]:
         reasons.append("Journey pattern is unusual compared to normal journeys")
 
-    return {
+    risk = {
         "risk_score": final_score,
         "risk_level": level_from_score(final_score),
         "rule_score": rules["risk_score"],
@@ -53,3 +48,21 @@ def risk_score(req: RiskRequest):
         "is_anomaly": anomaly["is_anomaly"],
         "reasons": reasons,
     }
+    return signals, risk
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "journey-ai"}
+
+
+@app.post("/risk/score")
+def risk_score(req: RiskRequest):
+    _, risk = compute_risk(req)
+    return risk
+
+
+@app.post("/assistant/advice")
+def assistant_advice(req: RiskRequest):
+    signals, risk = compute_risk(req)
+    return {"risk": risk, "advice": build_advice(signals, risk)}
