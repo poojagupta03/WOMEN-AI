@@ -21,8 +21,27 @@ def level_from_score(score: int) -> str:
     if score >= 30:
         return "medium"
     return "low"
+def level_from_score(score: int) -> str:
+    if score >= 60:
+        return "high"
+    if score >= 30:
+        return "medium"
+    return "low"
 
 
+def compute_confidence(rule_score: float, anomaly_score: float, signals_triggered: int) -> dict:
+    agreement = 1 - abs(rule_score - anomaly_score) / 100
+    evidence = min(signals_triggered / 3, 1)
+    confidence = round((0.7 * agreement + 0.3 * evidence) * 100)
+
+    if confidence >= 75:
+        label = "high"
+    elif confidence >= 50:
+        label = "medium"
+    else:
+        label = "low"
+
+    return {"confidence": confidence, "confidence_level": label} 
 def compute_risk(req: RiskRequest):
     signals = JourneySignals(
         route_deviation_m=req.route_deviation_m,
@@ -39,7 +58,26 @@ def compute_risk(req: RiskRequest):
     reasons = list(rules["reasons"])
     if anomaly["is_anomaly"]:
         reasons.append("Journey pattern is unusual compared to normal journeys")
-
+    breakdown = [
+        {
+            "factor": item["factor"],
+            "reason": item["reason"],
+            "contribution": round(0.6 * item["points"], 1),
+        }
+        for item in rules["breakdown"]
+    ]
+    breakdown.append(
+        {
+            "factor": "anomaly_model",
+            "reason": "Journey pattern is unusual compared to normal journeys"
+            if anomaly["is_anomaly"]
+            else "Journey pattern looks normal",
+            "contribution": round(0.4 * anomaly["anomaly_score"], 1),
+        }
+    )
+    confidence = compute_confidence(
+        rules["risk_score"], anomaly["anomaly_score"], len(rules["breakdown"])
+    ) 
     risk = {
         "risk_score": final_score,
         "risk_level": level_from_score(final_score),
@@ -47,7 +85,11 @@ def compute_risk(req: RiskRequest):
         "anomaly_score": anomaly["anomaly_score"],
         "is_anomaly": anomaly["is_anomaly"],
         "reasons": reasons,
+        "breakdown": breakdown,
+                **confidence,
+
     }
+    
     return signals, risk
 
 

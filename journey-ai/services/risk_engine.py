@@ -11,29 +11,28 @@ class JourneySignals:
 
 def calculate_risk(signals: JourneySignals) -> dict:
     score = 0
-    reasons = []
+    breakdown = []
+
+    def add(factor: str, points: int, reason: str):
+        nonlocal score
+        score += points
+        breakdown.append({"factor": factor, "points": points, "reason": reason})
 
     if signals.route_deviation_m > 500:
-        score += 35
-        reasons.append("Far off the planned route (more than 500 m)")
+        add("route_deviation", 35, "Far off the planned route (more than 500 m)")
     elif signals.route_deviation_m > 200:
-        score += 20
-        reasons.append("Off the planned route (more than 200 m)")
+        add("route_deviation", 20, "Off the planned route (more than 200 m)")
 
     if signals.stop_duration_min > 10:
-        score += 25
-        reasons.append("Unexpected long stop (more than 10 minutes)")
+        add("long_stop", 25, "Unexpected long stop (more than 10 minutes)")
     elif signals.stop_duration_min > 5:
-        score += 10
-        reasons.append("Unexpected stop (more than 5 minutes)")
+        add("long_stop", 10, "Unexpected stop (more than 5 minutes)")
 
     if signals.is_night:
-        score += 15
-        reasons.append("Travelling at night")
+        add("night_travel", 15, "Travelling at night")
 
     if signals.speed_kmh > 80:
-        score += 15
-        reasons.append("Unusually high speed")
+        add("high_speed", 15, "Unusually high speed")
 
     score = min(score, 100)
 
@@ -44,4 +43,10 @@ def calculate_risk(signals: JourneySignals) -> dict:
     else:
         level = "low"
 
-    return {"risk_score": score, "risk_level": level, "reasons": reasons}
+    reasons = [item["reason"] for item in breakdown]
+    return {
+        "risk_score": score,
+        "risk_level": level,
+        "reasons": reasons,
+        "breakdown": breakdown,
+    }
